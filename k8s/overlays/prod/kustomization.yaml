@@ -1,0 +1,25 @@
+# kustomization.yaml (overlay prod)
+# ---------------------------------------
+# Ambiente de prod: más réplicas (alta disponibilidad real) y recursos
+# más generosos. En un cluster real, acá también se agregarían cosas como
+# PriorityClass, anti-affinity entre pods (para que no todas las réplicas
+# caigan en el mismo nodo físico) y límites de recursos ajustados con
+# datos reales de uso (no "a ojo" como en este demo).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: prod
+
+resources:
+  - ../../base
+
+patches:
+  - path: replicas-patch.yaml
+    target:
+      kind: Deployment
+      name: demo-app
+
+images:
+  - name: devops-bootcamp-demo
+    newName: tu-registry.example.com/devops-bootcamp-demo
+    newTag: prod-latest

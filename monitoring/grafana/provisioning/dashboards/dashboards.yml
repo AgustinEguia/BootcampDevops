@@ -1,0 +1,17 @@
+# dashboards.yml (dashboard provisioning de Grafana)
+# -------------------------------------------------------
+# Le dice a Grafana "cargá automáticamente cualquier .json que encuentres
+# en esta carpeta como dashboard". Así el dashboard demo-app.json (ver
+# ../../dashboards/) aparece ya armado la primera vez que se levanta
+# Grafana, sin pasos manuales.
+apiVersion: 1
+
+providers:
+  - name: "demo-app-dashboards"
+    orgId: 1
+    folder: "Demo App"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

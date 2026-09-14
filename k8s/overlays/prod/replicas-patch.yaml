@@ -1,0 +1,33 @@
+# replicas-patch.yaml (prod)
+# -------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+spec:
+  replicas: 3
+  template:
+    spec:
+      # affinity "soft" (preferredDuringScheduling, no "required"): le
+      # pedimos al scheduler que TRATE de esparcir las réplicas entre
+      # distintos nodos, para que la caída de un solo nodo no tumbe todas
+      # las réplicas a la vez. Es "soft" para no dejar pods en Pending si
+      # el cluster no tiene suficientes nodos disponibles.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: demo-app
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: demo-app
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

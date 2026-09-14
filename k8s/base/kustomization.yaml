@@ -1,0 +1,30 @@
+# kustomization.yaml (base)
+# ----------------------------
+# Kustomize permite tener un set "base" de manifiestos genéricos y
+# aplicarles "parches" (overlays) por ambiente, sin duplicar YAML. Este es
+# el conjunto base: los overlays de dev/ y prod/ (ver k8s/overlays/) lo
+# referencian con `resources: [../../base]` y sólo declaran las
+# DIFERENCIAS (réplicas, recursos, namespace).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace destino de TODOS los recursos de este base. Sin esta línea,
+# `kubectl apply -k k8s/base` crea el namespace pero manda el resto de los
+# objetos a `default`, que es un error clásico y difícil de ver.
+namespace: demo-app
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+
+# Labels comunes que Kustomize agrega a TODOS los recursos de arriba.
+# Evita tener que repetir estas labels a mano en cada archivo.
+commonLabels:
+  app.kubernetes.io/part-of: devops-bootcamp-demo
+  app.kubernetes.io/managed-by: kustomize

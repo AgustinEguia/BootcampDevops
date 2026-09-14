@@ -1,0 +1,60 @@
+# kyverno-disallow-latest-tag.yaml
+# --------------------------------------
+# Bloquea el uso del tag `:latest` (o la ausencia de tag, que Docker
+# interpreta igual como `:latest`) en las imágenes de cualquier Pod.
+#
+# ¿Por qué es un problema `:latest`? Porque NO es reproducible: dos
+# personas (o dos deploys) que corren "la misma imagen" con tag `latest`
+# en momentos distintos pueden terminar con contenido DISTINTO, sin que
+# quede registro claro de cuál versión de código está corriendo
+# realmente. Esto rompe la trazabilidad commit -> imagen -> pod que todo
+# el pipeline de este curso está diseñado para mantener (ver
+# ci/gitlab/00-variables.yml: usamos siempre el SHA del commit como tag).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: "Prohíbe el tag :latest"
+    policies.kyverno.io/category: "Best Practices"
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/description: >-
+      Todas las imágenes deben usar un tag inmutable y trazable (el SHA
+      del commit, o un semver explícito), nunca `latest` ni la ausencia
+      de tag.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Cada container debe especificar una imagen con tag explícito (no vacío)."
+        foreach:
+          - list: "request.object.spec.containers"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ images.containers.{{element.name}}.tag || '' }}"
+                    operator: Equals
+                    value: ""
+    - name: disallow-latest-tag
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "No se permite el tag `:latest`. Usá el SHA del commit (ver ci/gitlab/00-variables.yml: IMAGE_TAG_SHA) o un semver explícito."
+        foreach:
+          - list: "request.object.spec.containers"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ images.containers.{{element.name}}.tag || '' }}"
+                    operator: Equals
+                    value: "latest"

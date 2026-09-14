@@ -1,0 +1,75 @@
+# ci/gitlab/50-terraform.yml
+# --------------------------
+# Pipeline de infraestructura (Día 10 del curso).
+#
+# Regla de oro: el `plan` se revisa, el `apply` se aprueba a mano.
+# Nadie aplica cambios de infraestructura sin que otra persona haya leído
+# antes qué recursos se crean, se modifican y —sobre todo— se DESTRUYEN.
+#
+# El plan se guarda como artifact binario (`tfplan`) y el apply consume
+# ESE archivo, no vuelve a planificar. Así te asegurás de aplicar
+# exactamente lo que se revisó, aunque alguien haya mergeado algo en el
+# medio.
+
+.terraform_base:
+  image:
+    name: hashicorp/terraform:1.9
+    entrypoint: [""]
+  variables:
+    # Cada capa de infra vive en su propio directorio y tiene su propio
+    # state. TF_ROOT se sobrescribe en cada job hijo.
+    TF_ROOT: "terraform/10-network"
+    TF_IN_AUTOMATION: "true"
+  before_script:
+    - cd "${TF_ROOT}"
+    # Las credenciales de AWS vienen de variables de CI protegidas y
+    # enmascaradas (Settings > CI/CD > Variables). NUNCA en el repo.
+    - terraform init -input=false
+  cache:
+    # El directorio de providers se cachea por capa: bajar los providers
+    # de AWS en cada job es lo más lento del pipeline de infra.
+    key: "tf-${TF_ROOT}"
+    paths:
+      - ${TF_ROOT}/.terraform
+
+tf:fmt-validate:
+  extends: .terraform_base
+  stage: lint
+  script:
+    - terraform fmt -check -recursive -diff ..
+    - terraform validate
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+tf:plan:
+  extends: .terraform_base
+  stage: test
+  script:
+    # -detailed-exitcode devuelve 2 cuando hay cambios pendientes: lo
+    # capturamos para no hacer fallar el job, pero deja registro claro.
+    - terraform plan -input=false -out=tfplan
+    - terraform show -no-color tfplan > plan.txt
+  artifacts:
+    name: "plan-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - ${TF_ROOT}/tfplan
+      - ${TF_ROOT}/plan.txt
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+tf:apply:
+  extends: .terraform_base
+  stage: deploy-prod
+  script:
+    # Aplicamos el plan guardado, no uno nuevo: lo revisado es lo aplicado.
+    - terraform apply -input=false -auto-approve tfplan
+  needs:
+    - job: tf:plan
+      artifacts: true
+  environment:
+    name: infra/aws
+  # Aprobación humana obligatoria. Este es el freno de mano del pipeline.
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

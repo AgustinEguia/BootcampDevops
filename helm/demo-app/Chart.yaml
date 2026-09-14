@@ -1,0 +1,25 @@
+# Chart.yaml
+# ------------
+# Metadata del chart de Helm. Este es el que usa el pipeline de CI/CD
+# (ci/gitlab/40-deploy.yml y el Jenkinsfile) para hacer
+# `helm upgrade --install` tanto en dev como en prod.
+apiVersion: v2
+name: demo-app
+description: Chart de Helm para la app demo del bootcamp de DevOps/CI-CD
+type: application
+
+# version: versión del CHART (su estructura de templates/values), sube
+# cada vez que cambiamos ALGO del chart en sí.
+# appVersion: versión de la APLICACIÓN que el chart despliega por
+# default; el pipeline la pisa en cada deploy con --set image.tag=<sha>,
+# pero dejamos un valor razonable acá para instalaciones manuales.
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - devops-bootcamp
+  - fastapi
+  - demo
+
+maintainers:
+  - name: Equipo DevOps Bootcamp

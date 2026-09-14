@@ -1,0 +1,22 @@
+# pdb.yaml
+# ----------
+# PodDisruptionBudget: le dice a Kubernetes "durante una interrupción
+# VOLUNTARIA (drenar un nodo para upgradearlo, un `kubectl evict`, etc.)
+# nunca dejes con menos de esta cantidad de pods corriendo".
+#
+# Esto NO protege contra crashes o fallas de nodo inesperadas (eso lo
+# maneja el propio Deployment recreando pods); protege específicamente
+# contra que un mantenimiento planificado (por ejemplo, un upgrade del
+# cluster EKS que drena nodos uno por uno) tumbe TODOS los pods de la app
+# al mismo tiempo y cause downtime evitable.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-app

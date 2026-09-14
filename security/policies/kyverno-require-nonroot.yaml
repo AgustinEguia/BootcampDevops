@@ -1,0 +1,58 @@
+# kyverno-require-nonroot.yaml
+# --------------------------------
+# Policy de Kyverno (motor de "policy as code" para Kubernetes) que
+# BLOQUEA la creación de cualquier Pod que no declare explícitamente
+# runAsNonRoot: true.
+#
+# ¿Por qué esto además del securityContext que ya pusimos en
+# k8s/base/deployment.yaml y helm/demo-app/templates/deployment.yaml?
+# Porque un securityContext correcto en NUESTRO manifiesto es una buena
+# práctica, pero no evita que MAÑANA alguien (con buena o mala intención)
+# aplique un Deployment sin ese campo. Kyverno actúa como un "guardián" a
+# nivel de cluster (un admission controller): valida CADA request de
+# creación/actualización de un Pod contra estas reglas, sin importar
+# quién ni cómo lo esté aplicando (kubectl, Helm, un CI/CD, etc).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-run-as-nonroot
+  annotations:
+    policies.kyverno.io/title: "Requiere runAsNonRoot"
+    policies.kyverno.io/category: "Pod Security Standards (Restricted)"
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Bloquea Pods que no declaren runAsNonRoot: true (a nivel Pod o
+      Container). Correr contenedores como root amplía muchísimo el
+      impacto de una posible fuga del contenedor (container breakout).
+spec:
+  # validationFailureAction: Enforce vs Audit.
+  #   - Audit: sólo REPORTA violaciones, no bloquea nada. Es lo que se usa
+  #     al introducir una policy nueva, para ver primero cuántos
+  #     manifiestos existentes la violarían, sin romper nada en
+  #     producción de un día para el otro.
+  #   - Enforce: BLOQUEA activamente la creación del recurso si viola la
+  #     policy. Se pasa a Enforce una vez que el equipo ya migró/corrigió
+  #     los manifiestos existentes.
+  # Para este demo del curso dejamos Enforce, ya que nuestros propios
+  # manifiestos (k8s/, helm/) ya cumplen la regla.
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: check-runAsNonRoot
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: >-
+          El Pod debe correr como usuario no-root: definí
+          `securityContext.runAsNonRoot: true` a nivel Pod o Container.
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true

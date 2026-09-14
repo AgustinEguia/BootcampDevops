@@ -1,0 +1,21 @@
+# service.yaml
+# --------------
+# ClusterIP: expone el Deployment DENTRO del cluster, con un nombre DNS
+# estable (demo-app.<namespace>.svc.cluster.local) aunque los pods vayan
+# y vengan. El tráfico externo entra vía el Ingress (ingress.yaml), que
+# apunta a este Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: demo-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

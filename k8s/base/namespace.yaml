@@ -1,0 +1,16 @@
+# namespace.yaml
+# ----------------
+# Los namespaces "dev" y "prod" en realidad los crea `helm upgrade
+# --install ... --create-namespace` en el pipeline, y kustomize (con
+# `namespace:` en kustomization.yaml) inyecta el namespace en todos los
+# recursos del overlay correspondiente. Este archivo queda acá para los
+# alumnos que quieran aplicar `k8s/base/` "a mano" con kubectl, sin pasar
+# por los overlays de dev/prod (por ejemplo, para practicar en un
+# namespace propio durante el curso).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+    app.kubernetes.io/part-of: devops-bootcamp-demo

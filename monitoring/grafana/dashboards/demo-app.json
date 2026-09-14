@@ -1,0 +1,173 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "id": null,
+  "uid": "demo-app-red-dora",
+  "title": "Demo App - RED + DORA",
+  "description": "Dashboard pedagogico: metricas RED (Rate, Errors, Duration) de la app demo, mas un panel de referencia para las 4 metricas DORA (deployment frequency, lead time, change failure rate, MTTR). Pensado como material de estudio del bootcamp de DevOps/CI-CD.",
+  "tags": ["devops-bootcamp", "demo-app"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "RED - Rate, Errors, Duration",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Rate: requests por segundo",
+      "description": "Tasa de requests HTTP recibidos por la app, agrupados por metodo y path. Calculado como rate() del Counter http_requests_total, no el valor acumulado crudo.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"demo-app\"}[5m])) by (method, path)",
+          "legendFormat": "{{method}} {{path}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Errors: tasa de errores 5xx (%)",
+      "description": "Porcentaje de requests que terminaron en un status code 5xx, sobre el total de requests, calculado en ventanas de 5 minutos.",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "100 * (sum(rate(http_requests_total{job=\"demo-app\", status_code=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"demo-app\"}[5m])))",
+          "legendFormat": "% error 5xx",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Duration: latencia p50 / p95 / p99",
+      "description": "Percentiles de duracion de requests, calculados con histogram_quantile() sobre los buckets del Histogram http_request_duration_seconds.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"demo-app\"}[5m])) by (le))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"demo-app\"}[5m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"demo-app\"}[5m])) by (le))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "row",
+      "title": "DORA - metricas de performance de entrega de software",
+      "description": "Las 4 metricas DORA miden el desempeno del proceso de CI/CD en si (no de la app en runtime). En este demo son paneles de REFERENCIA/PLACEHOLDER: para poblarlos con datos reales hace falta un exporter que lea eventos de deploy del pipeline (GitLab/Jenkins) y de incidentes, algo fuera del alcance de este demo minimo.",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Deployment Frequency",
+      "description": "Cuantas veces se despliega a produccion por dia/semana. Elite performers: multiples deploys por dia. En este demo, se alimentaria contando ejecuciones exitosas del job deploy:prod del pipeline (ver ci/gitlab/40-deploy.yml).",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "sum(increase(demo_app_deploys_total{env=\"prod\"}[7d]))", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "sin datos (placeholder)" }, "overrides": [] }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Lead Time for Changes",
+      "description": "Tiempo desde que un commit se mergea hasta que llega a produccion. Elite performers: menos de 1 hora. Se calcularia con timestamps del pipeline (commit -> deploy:prod exitoso).",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "avg(demo_app_lead_time_seconds)", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "noValue": "sin datos (placeholder)" }, "overrides": [] }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Change Failure Rate",
+      "description": "Porcentaje de deploys a produccion que resultan en un incidente/rollback. Elite performers: 0-15%. Se calcularia como (rollbacks / deploys totales) en una ventana de tiempo.",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "100 * (sum(increase(demo_app_rollbacks_total[30d])) / sum(increase(demo_app_deploys_total[30d])))", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent", "noValue": "sin datos (placeholder)" }, "overrides": [] }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "MTTR (Mean Time To Restore)",
+      "description": "Tiempo promedio en resolver un incidente en produccion, desde que se detecta hasta que el servicio vuelve a funcionar normalmente. Elite performers: menos de 1 hora.",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "expr": "avg(demo_app_incident_restore_time_seconds)", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "noValue": "sin datos (placeholder)" }, "overrides": [] }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      }
+    ]
+  }
+}

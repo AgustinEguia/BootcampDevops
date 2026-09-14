@@ -1,0 +1,77 @@
+# alerts.yml
+# ------------
+# Reglas de alertas de Prometheus. Cada regla es una consulta PromQL que,
+# si se mantiene "true" durante el tiempo indicado en `for`, dispara la
+# alerta. El campo `for` existe justamente para evitar "alert fatigue":
+# sin él, un pico de 5 segundos de error dispararía una alerta y
+# despertaría a alguien a las 3am por algo que se auto-resolvió solo.
+groups:
+  - name: demo-app.rules
+    rules:
+      # --- App caída --------------------------------------------------
+      # `up` es una métrica que Prometheus genera automáticamente por
+      # cada target: vale 1 si el último scrape fue exitoso, 0 si no.
+      # Si vale 0 durante más de 1 minuto, algo serio está pasando (el
+      # proceso se cayó, o hay un problema de red).
+      - alert: DemoAppCaida
+        expr: up{job="demo-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "La app demo no responde"
+          description: "Prometheus no pudo scrapear a demo-app en los últimos 1 minuto. Puede estar caída o inaccesible."
+
+      # --- Error rate > 5% -----------------------------------------------
+      # Calculamos qué proporción de los requests de los últimos 5
+      # minutos terminaron en 5xx. Usamos rate() (no el valor crudo del
+      # Counter) porque los Counters sólo crecen: lo que nos interesa es
+      # la VELOCIDAD a la que crecen, no el total acumulado desde que
+      # arrancó el proceso.
+      - alert: TasaDeErroresAlta
+        expr: |
+          (
+            sum(rate(http_requests_total{job="demo-app", status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{job="demo-app"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tasa de errores 5xx por encima del 5%"
+          description: "Más del 5% de los requests a demo-app resultaron en error 5xx en los últimos 5 minutos."
+
+      # --- Latencia p95 alta --------------------------------------------
+      # histogram_quantile calcula el percentil 95 de duración a partir
+      # de los buckets del Histogram (ver app/metrics.py). "p95 > 500ms"
+      # significa "el 95% de los requests responden en menos de 500ms";
+      # si NO se cumple, algo está degradando el rendimiento.
+      - alert: LatenciaP95Alta
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{job="demo-app"}[5m])) by (le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia p95 por encima de 500ms"
+          description: "El percentil 95 de duración de requests a demo-app superó los 500ms durante 5 minutos seguidos."
+
+      # --- Reinicios de pods (requiere kube-state-metrics en el cluster) --
+      # kube_pod_container_status_restarts_total es una métrica que expone
+      # kube-state-metrics (no la app en sí). La incluimos igual acá para
+      # que los alumnos vean cómo se combinan métricas de la app con
+      # métricas de infraestructura del cluster en una sola capa de
+      # alerting. En el docker-compose local esta métrica no va a existir
+      # (no hay Kubernetes ni kube-state-metrics), así que esta regla sólo
+      # aplica una vez desplegado en un cluster real.
+      - alert: PodReiniciandoSeguido
+        expr: increase(kube_pod_container_status_restarts_total{container="demo-app"}[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "El pod de demo-app se reinició varias veces"
+          description: "Más de 3 reinicios en los últimos 15 minutos: revisar logs y el resultado de las probes (liveness/readiness)."

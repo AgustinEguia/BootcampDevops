@@ -1,0 +1,37 @@
+# .gitleaks.toml
+# ----------------
+# Configuración de gitleaks: qué reglas usar para detectar secretos
+# commiteados (API keys, tokens, passwords) y qué excepciones permitir
+# explícitamente (para no llenar el pipeline de falsos positivos).
+title = "gitleaks-config-devops-bootcamp-demo"
+
+# Partimos de las reglas default de gitleaks (cientos de patrones ya
+# armados para AWS, GitHub, Slack, Stripe, etc.) y sólo agregamos
+# excepciones puntuales para este repo.
+[extend]
+useDefault = true
+
+# "allowlist" global: rutas/patrones que gitleaks NUNCA debe reportar,
+# aunque matcheen una regla. Es importante mantener esta lista lo más
+# CORTA posible: cada entrada acá es un lugar donde, si alguien comete un
+# error, el secreto NO se va a detectar.
+[allowlist]
+description = "Excepciones globales del repo"
+paths = [
+  # Los valores de este archivo son EJEMPLOS/PLACEHOLDERS a propósito
+  # (ver k8s/base/secret.example.yaml), no secretos reales.
+  '''k8s/base/secret\.example\.yaml''',
+  # El propio reporte que genera gitleaks no debería auto-escanearse en
+  # una corrida posterior.
+  '''gitleaks-report\.json''',
+]
+
+# Ejemplo de regex explícita adicional para detectar el patrón particular
+# de nuestras "API keys" de ejemplo, por si algún alumno pega una acá
+# sin darse cuenta durante un lab (esto es DIDÁCTICO, en un proyecto real
+# se ajustaría a los secretos reales que maneja el equipo).
+[[rules]]
+id = "demo-app-example-api-key"
+description = "Patrón de ejemplo: detecta placeholders de API key mal reemplazados"
+regex = '''(?i)EXAMPLE_API_KEY\s*[:=]\s*['"][A-Za-z0-9_\-]{16,}['"]'''
+tags = ["key", "demo"]

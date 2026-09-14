@@ -1,0 +1,21 @@
+# replicas-patch.yaml (dev)
+# ----------------------------
+# Patch estratégico: sólo declara los campos que queremos CAMBIAR
+# respecto de la base. Kustomize hace el merge con deployment.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: demo-app
+          resources:
+            requests:
+              cpu: "25m"
+              memory: "48Mi"
+            limits:
+              cpu: "100m"
+              memory: "96Mi"

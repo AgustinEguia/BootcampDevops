@@ -1,0 +1,44 @@
+# 20-test.yml
+# ------------
+# Stage "test": corre la suite de pytest con cobertura y publica los
+# resultados en formatos que GitLab sabe interpretar nativamente
+# (JUnit XML para ver tests pasados/fallidos en la UI de MRs, y Cobertura
+# XML para el resumen de cobertura en el diff del merge request).
+test:pytest:
+  stage: test
+  image: python:3.11-slim
+  cache:
+    key:
+      files:
+        - app/requirements.txt
+        - app/requirements-dev.txt
+    paths:
+      - .cache/pip
+  before_script:
+    - pip install --quiet -r app/requirements-dev.txt
+  script:
+    - cd app
+    - >
+      python -m pytest tests -v
+      --cov=.
+      --cov-report=term-missing
+      --cov-report=xml:coverage.xml
+      --junitxml=junit.xml
+  # GitLab lee estos reportes y los muestra en la pestaña "Tests" del
+  # pipeline y como anotaciones en el diff del merge request.
+  artifacts:
+    when: always
+    reports:
+      junit: app/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: app/coverage.xml
+    paths:
+      - app/coverage.xml
+      - app/junit.xml
+    expire_in: 30 days
+  # Este regex le dice a GitLab dónde buscar el porcentaje de cobertura
+  # en el log del job, para mostrarlo como badge en el proyecto.
+  coverage: '/TOTAL.+ (\d+\.?\d*)%/'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG'

@@ -1,0 +1,11 @@
+aws_region      = "us-east-1"
+project_name    = "devops-bootcamp-demo"
+cluster_version = "1.30"
+
+node_instance_types = ["t3.medium"]
+node_min_size       = 1
+node_max_size       = 3
+node_desired_size   = 2
+
+# Mismo bucket que outputea 00-backend (output tfstate_bucket_name).
+tfstate_bucket = "<TU_ACCOUNT_ID>-devops-bootcamp-demo-tfstate"

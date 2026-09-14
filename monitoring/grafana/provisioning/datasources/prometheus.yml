@@ -1,0 +1,17 @@
+# prometheus.yml (datasource provisioning de Grafana)
+# -------------------------------------------------------
+# El "provisioning" de Grafana permite declarar datasources y dashboards
+# como código (archivos YAML/JSON), en vez de tener que configurarlos a
+# mano clickeando en la UI cada vez que se levanta el stack. Grafana lee
+# estos archivos al arrancar (ver el volumen montado en docker-compose.yml).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    # "prometheus" es el nombre del servicio en docker-compose.yml: Docker
+    # DNS lo resuelve a la IP del contenedor correspondiente.
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true

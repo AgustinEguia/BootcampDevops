@@ -1,0 +1,20 @@
+# .trivyignore
+# --------------
+# Lista de CVEs que decidimos IGNORAR explícitamente en los scans de
+# Trivy (tanto sca:trivy-fs como image-scan:trivy). Cada entrada acá
+# DEBE tener un comentario explicando POR QUÉ se ignora: sin eso, con el
+# tiempo nadie recuerda si el ignore sigue siendo válido o quedó
+# obsoleto.
+#
+# Formato: un CVE-ID por línea (opcionalmente con fecha de expiración:
+# CVE-XXXX-YYYY exp:2026-12-31).
+#
+# Este archivo arranca vacío a propósito: es el estado por default de un
+# proyecto nuevo. Ejemplo de cómo se vería una excepción real (comentado):
+#
+# CVE-2023-XXXXX exp:2026-12-31
+#   Vulnerabilidad en una dependencia transitiva de uvicorn que sólo
+#   afecta al modo --reload (no usado en producción, sólo en `make run`
+#   para desarrollo local). Mitigado además porque el contenedor corre
+#   como usuario no-root y con filesystem de solo lectura. Revisar antes
+#   de la fecha de expiración si ya hay un fix disponible.

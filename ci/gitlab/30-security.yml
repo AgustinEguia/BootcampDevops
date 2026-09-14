@@ -1,0 +1,130 @@
+# 30-security.yml
+# -----------------
+# Acá viven las 4 etapas de seguridad del pipeline: sast, secrets, sca e
+# image-scan. La idea pedagógica es mostrar "defense in depth": ninguna
+# herramienta sola detecta todo, así que combinamos varias, cada una
+# mirando una capa distinta (código propio, historial de git, dependencias
+# de terceros, imagen final).
+
+# --- Stage: sast (Static Application Security Testing) -------------------
+# Bandit analiza el CÓDIGO PROPIO buscando patrones inseguros conocidos en
+# Python (uso de eval, subprocess con shell=True, contraseñas hardcodeadas,
+# etc). Es rápido y no requiere infraestructura externa.
+sast:bandit:
+  stage: sast
+  image: python:3.11-slim
+  before_script:
+    - pip install --quiet bandit==1.7.10
+  script:
+    # -r: recursivo. -f json: reporte machine-readable que guardamos como
+    # artifact para poder revisarlo aunque el job no falle.
+    - bandit -r app/main.py app/metrics.py -f json -o bandit-report.json
+    - bandit -r app/main.py app/metrics.py
+  artifacts:
+    when: always
+    paths:
+      - bandit-report.json
+    expire_in: 30 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG'
+
+# SonarQube hace un análisis más profundo: además de seguridad, mide
+# "code smells", duplicación, complejidad ciclomática, y aplica un
+# "Quality Gate" (un umbral configurable: por ejemplo, "no more than 0
+# bugs nuevos" o "cobertura >= 80%").
+#
+# DECISIÓN PEDAGÓGICA: dejamos este job con `allow_failure: true`.
+# ¿Por qué? Porque requiere un servidor SonarQube corriendo (con su propio
+# token, SONAR_HOST_URL y SONAR_TOKEN como variables protegidas del
+# proyecto) que el curso no siempre va a tener disponible en todos los
+# ambientes de práctica. Si el servidor no está configurado, este job va
+# a fallar (no puede conectarse) pero NO va a bloquear el resto del
+# pipeline. En un proyecto real, una vez que SonarQube está bien
+# configurado, esto se debería sacar (allow_failure: false) para que el
+# quality gate sea realmente bloqueante.
+sast:sonarqube:
+  stage: sast
+  image: sonarsource/sonar-scanner-cli:5.0
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"
+    GIT_DEPTH: "0"  # Sonar necesita el historial completo para "blame" y detección de código nuevo.
+  script:
+    # -Dproject.settings apunta al archivo de configuración: como lo
+    # guardamos en security/ y no en la raíz, sonar-scanner no lo encuentra
+    # solo. Sin esta línea el análisis corre con valores por defecto y no
+    # respeta las exclusiones ni la clave de proyecto que definimos.
+    - sonar-scanner
+      -Dproject.settings=security/sonar-project.properties
+      -Dsonar.host.url="${SONAR_HOST_URL}"
+      -Dsonar.token="${SONAR_TOKEN}"
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# --- Stage: secrets --------------------------------------------------------
+# gitleaks escanea el HISTORIAL de git (no sólo el working tree) buscando
+# patrones de secretos (API keys, tokens, credenciales) que se hayan
+# commiteado por error. Es la última línea de defensa antes de que un
+# secreto llegue a un repo compartido; lo ideal es correrlo también como
+# pre-commit hook local, para no depender sólo de esto en CI.
+secrets:gitleaks:
+  stage: secrets
+  image: zricethezav/gitleaks:v8.18.4
+  script:
+    - gitleaks detect --source . --config security/.gitleaks.toml --report-format json --report-path gitleaks-report.json --verbose
+  artifacts:
+    when: always
+    paths:
+      - gitleaks-report.json
+    expire_in: 30 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG'
+
+# --- Stage: sca (Software Composition Analysis) ---------------------------
+# Trivy en modo "fs" analiza las DEPENDENCIAS declaradas (requirements.txt)
+# contra bases de datos públicas de vulnerabilidades (CVEs). A diferencia
+# de bandit (que mira nuestro código), esto mira código de terceros que
+# nosotros no escribimos pero sí empaquetamos.
+sca:trivy-fs:
+  stage: sca
+  image: aquasec/trivy:0.55.2
+  script:
+    - trivy fs --scanners vuln --severity CRITICAL,HIGH --exit-code 0 --format table app/requirements.txt
+    # exit-code 0 acá a propósito: en este job informativo no bloqueamos el
+    # pipeline por CVEs de dependencias (eso se decide como política del
+    # equipo); el que SÍ bloquea es image-scan más adelante.
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG'
+
+# Generamos un SBOM (Software Bill of Materials): un inventario formal de
+# todo lo que compone nuestro software (dependencias directas e
+# indirectas, con sus versiones y licencias). Cada vez es más común que
+# sea un requisito regulatorio o de compliance en clientes enterprise.
+# Usamos Trivy mismo para generarlo en formato CycloneDX (un estándar
+# ampliamente soportado por otras herramientas).
+sca:sbom:
+  stage: sca
+  image: aquasec/trivy:0.55.2
+  script:
+    - trivy fs --format cyclonedx --output sbom.cyclonedx.json app/requirements.txt
+  artifacts:
+    paths:
+      - sbom.cyclonedx.json
+    expire_in: 90 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# --- Stage: image-scan -----------------------------------------------------
+# A diferencia de sca:trivy-fs (que mira sólo requirements.txt), acá
+# escaneamos la IMAGEN DOCKER YA CONSTRUIDA: eso incluye también el
+# sistema operativo base (python:3.11-slim) y todas sus librerías del
+# sistema. Este job SÍ es bloqueante (exit-code 1) ante vulnerabilidades
+# CRITICAL: no queremos que una imagen con una CVE crítica conocida
+# llegue a deploy-dev.
+image-scan:trivy:
+  stage: image-scan
+  image: aquasec/trivy:0.55.2
+  script:
+    - trivy image --severity CRITICAL --exit-code 1 --ignorefile security/trivy/.trivyignore "${IMAGE_NAME}:${IMAGE_TAG_SHA}"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH || $CI_COMMIT_TAG'

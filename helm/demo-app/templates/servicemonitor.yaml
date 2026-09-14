@@ -1,0 +1,30 @@
+{{/*
+servicemonitor.yaml
+----------------------
+ServiceMonitor: un Custom Resource que entiende el "Prometheus Operator"
+(no el Prometheus "standalone" que levantamos con docker-compose para el
+curso). Le dice al Operator "andá a buscar métricas en el Service tal, en
+tal puerto/path, cada tantos segundos", y el Operator reconfigura
+Prometheus automáticamente, sin tocar prometheus.yml a mano.
+
+Por eso viene deshabilitado por default (serviceMonitor.enabled: false):
+sólo tiene sentido si el cluster de destino tiene el Prometheus Operator
+instalado (el CRD `servicemonitors.monitoring.coreos.com` debe existir),
+cosa que NO es el caso del docker-compose local del curso.
+*/}}
+{{- if .Values.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "demo-app.fullname" . }}
+  labels:
+    {{- include "demo-app.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "demo-app.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: {{ .Values.serviceMonitor.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}

@@ -1,0 +1,92 @@
+# 40-deploy.yml
+# --------------
+# Stages: deploy-dev (automático), smoke-test (verifica que el deploy a
+# dev funcionó) y deploy-prod (manual, con aprobación humana).
+#
+# Todos estos jobs asumen que el runner de GitLab tiene configurado el
+# acceso al cluster de Kubernetes (por ejemplo vía KUBECONFIG como
+# variable protegida, o integrando el "GitLab Kubernetes Agent"). Ese
+# detalle de infraestructura del runner queda fuera del alcance de este
+# demo: acá nos enfocamos en la lógica del pipeline.
+
+# --- Stage: deploy-dev -----------------------------------------------------
+# Se ejecuta automáticamente en cada push a la rama principal: dev es el
+# ambiente de "integración continua real", donde queremos ver el resultado
+# de cada cambio lo antes posible, sin esperar aprobación humana.
+deploy:dev:
+  stage: deploy-dev
+  image: alpine/helm:3.16.1
+  script:
+    - >
+      helm upgrade --install demo-app helm/demo-app
+      --namespace "${K8S_NAMESPACE_DEV}" --create-namespace
+      --values helm/demo-app/values-dev.yaml
+      --set image.tag="${IMAGE_TAG_SHA}"
+      --wait --timeout 3m
+  environment:
+    name: dev
+    url: https://demo-app-dev.tu-dominio.com
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# --- Stage: smoke-test ------------------------------------------------------
+# Un smoke test es un chequeo MÍNIMO y RÁPIDO post-deploy: no reemplaza a
+# los tests automatizados (que ya corrieron en la stage "test"), sino que
+# confirma que el deploy en sí funcionó (la app levantó, responde, no
+# quedó en CrashLoopBackOff). Si esto falla, sabemos inmediatamente que el
+# problema está en el deploy/infra y no en la lógica de negocio.
+smoke-test:dev:
+  stage: smoke-test
+  image: curlimages/curl:8.10.1
+  variables:
+    APP_URL: "https://demo-app-dev.tu-dominio.com"
+  script:
+    - sh scripts/smoke-test.sh "${APP_URL}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# --- Stage: deploy-prod -----------------------------------------------------
+# `when: manual` hace que este job aparezca en la UI de GitLab como un
+# botón "▶" que alguien tiene que apretar a propósito: es el "gate" de
+# aprobación humana antes de tocar producción. Combinado con
+# `environment: prod` y "protected environments" (configuración a nivel
+# proyecto en GitLab), se puede además restringir QUIÉN tiene permiso de
+# apretar ese botón (por ejemplo, sólo el team lead).
+deploy:prod:
+  stage: deploy-prod
+  image: alpine/helm:3.16.1
+  script:
+    - >
+      helm upgrade --install demo-app helm/demo-app
+      --namespace "${K8S_NAMESPACE_PROD}" --create-namespace
+      --values helm/demo-app/values-prod.yaml
+      --set image.tag="${IMAGE_TAG_SHA}"
+      --wait --timeout 5m
+  environment:
+    name: prod
+    url: https://demo-app.tu-dominio.com
+  when: manual
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# ---------------------------------------------------------------------------
+# ROLLBACK EN PRODUCCIÓN (documentado acá porque no es un job automático:
+# es un procedimiento manual que el equipo ejecuta si algo sale mal
+# después de un deploy:prod).
+#
+# Opción 1 - Rollback con Helm (recomendado, es instantáneo):
+#   helm history demo-app -n prod                 # ver revisiones anteriores
+#   helm rollback demo-app <N° DE REVISION> -n prod
+#
+# Opción 2 - Re-deployar la versión anterior explícitamente:
+#   Volver a correr manualmente el job deploy:prod pero de un pipeline
+#   ANTERIOR (en la UI de GitLab: Pipelines > buscar el pipeline del
+#   commit bueno > Deploy > Play). Esto vuelve a aplicar exactamente el
+#   mismo chart+values+tag de imagen que ya sabíamos que funcionaba.
+#
+# Opción 3 - kubectl rollout undo (si no se usó Helm para ese deploy):
+#   kubectl rollout undo deployment/demo-app -n prod
+#
+# En los tres casos, el paso siguiente SIEMPRE es abrir un incidente /
+# post-mortem: un rollback resuelve el síntoma, no la causa.
+# ---------------------------------------------------------------------------

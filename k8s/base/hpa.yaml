@@ -1,0 +1,40 @@
+# hpa.yaml
+# ----------
+# HorizontalPodAutoscaler: escala el número de réplicas automáticamente
+# según el uso de CPU. Requiere que el cluster tenga metrics-server
+# instalado (casi todos los clusters managed lo traen por default: EKS,
+# GKE, AKS; kind requiere instalarlo aparte, ver scripts/kind-cluster.sh).
+#
+# NOTA: para que esto funcione bien, el Deployment DEBE tener resources
+# requests definidos (ver deployment.yaml) porque el HPA calcula el % de
+# uso de CPU como (uso real / request), no contra el límite.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-app
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # Si el uso promedio de CPU supera el 70% del request declarado,
+          # el HPA agrega réplicas (hasta maxReplicas).
+          averageUtilization: 70
+  behavior:
+    # scaleDown más lento que scaleUp: subir rápido ante un pico de
+    # tráfico es bueno, pero bajar réplicas muy rápido puede causar
+    # "flapping" (subir y bajar en loop) si el tráfico es intermitente.
+    scaleDown:
+      stabilizationWindowSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 0

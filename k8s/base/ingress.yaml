@@ -1,0 +1,31 @@
+# ingress.yaml
+# --------------
+# Expone la app hacia afuera del cluster. Asume que hay un Ingress
+# Controller instalado (nginx-ingress, por ejemplo) y, opcionalmente,
+# cert-manager para TLS automático (de ahí la anotación
+# cert-manager.io/cluster-issuer, comentada por default ya que requiere
+# ese componente instalado).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Descomentar si el cluster tiene cert-manager instalado, para pedir
+    # un certificado TLS automático via Let's Encrypt:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: demo-app.local.test
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-app
+                port:
+                  number: 80

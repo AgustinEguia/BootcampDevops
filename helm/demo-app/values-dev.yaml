@@ -1,0 +1,33 @@
+# values-dev.yaml
+# -----------------
+# Overrides para el ambiente de DEV. Se usa así:
+#   helm upgrade --install demo-app helm/demo-app \
+#     --namespace dev --create-namespace \
+#     --values helm/demo-app/values-dev.yaml \
+#     --set image.tag=<sha-del-commit>
+#
+# Sólo declaramos lo que CAMBIA respecto de values.yaml: menos réplicas,
+# menos recursos, sin autoscaling (no tiene sentido en un ambiente de
+# poco tráfico), y el ServiceMonitor habilitado para que los alumnos
+# practiquen viendo métricas reales en Grafana desde el ambiente de dev.
+replicaCount: 1
+
+env:
+  GREETING: "Hola desde DEV!"
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 48Mi
+  limits:
+    cpu: 100m
+    memory: 96Mi
+
+autoscaling:
+  enabled: false
+
+serviceMonitor:
+  enabled: true
+
+ingress:
+  host: demo-app-dev.tu-dominio.com

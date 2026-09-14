@@ -1,0 +1,44 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+junit.xml
+.venv/
+.venv-test/
+venv/
+
+# --- Docker ---
+*.log
+
+# --- Terraform ---
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+.terraform.lock.hcl
+
+# --- Helm ---
+**/charts/*.tgz
+
+# --- Kubernetes ---
+k8s/base/secret.yaml
+kubeconfig*
+
+# --- IDE / SO ---
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# --- Seguridad: nunca commitear secretos reales ---
+*.env
+.env.*
+!.env.example

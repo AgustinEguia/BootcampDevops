@@ -1,0 +1,55 @@
+# .gitlab-ci.yml
+# ---------------
+# Pipeline principal. En vez de tener un único archivo gigante, lo
+# dividimos en pedazos temáticos dentro de ci/gitlab/ e incluimos cada uno
+# con `include: local:`. Esto es lo mismo que tener todo en un solo
+# archivo (GitLab lo concatena todo antes de correrlo) pero mucho más
+# fácil de leer, revisar en un merge request y mantener a medida que el
+# pipeline crece.
+#
+# Mapa de las 10 etapas del pipeline (ver detalle en cada archivo
+# incluido):
+#   1. lint          -> ci/gitlab/10-build.yml   (ruff + hadolint)
+#   2. test           -> ci/gitlab/20-test.yml    (pytest + cobertura)
+#   3. sast            -> ci/gitlab/30-security.yml (bandit + sonarqube)
+#   4. secrets          -> ci/gitlab/30-security.yml (gitleaks)
+#   5. sca               -> ci/gitlab/30-security.yml (trivy fs + sbom)
+#   6. build               -> ci/gitlab/10-build.yml   (docker build + push)
+#   7. image-scan            -> ci/gitlab/30-security.yml (trivy image)
+#   8. deploy-dev              -> ci/gitlab/40-deploy.yml  (helm upgrade, automático)
+#   9. smoke-test                -> ci/gitlab/40-deploy.yml  (scripts/smoke-test.sh)
+#  10. deploy-prod                -> ci/gitlab/40-deploy.yml  (manual/aprobación)
+#
+# Además, el pipeline de infraestructura (Día 10) reutiliza los stages
+# lint / test / deploy-prod con los jobs tf:fmt-validate, tf:plan y
+# tf:apply, definidos en ci/gitlab/50-terraform.yml.
+include:
+  - local: "ci/gitlab/00-variables.yml"
+  - local: "ci/gitlab/10-build.yml"
+  - local: "ci/gitlab/20-test.yml"
+  - local: "ci/gitlab/30-security.yml"
+  - local: "ci/gitlab/40-deploy.yml"
+  - local: "ci/gitlab/50-terraform.yml"
+
+# Imagen default para jobs que no especifican la suya propia.
+default:
+  image: python:3.11-slim
+  # Reintentamos automáticamente sólo si falla por un problema de
+  # infraestructura del runner (no si el código/tests fallan de verdad):
+  # esto evita que un runner inestable rompa el pipeline sin motivo real.
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+workflow:
+  rules:
+    # Evita el clásico problema de "pipeline duplicado": sin esta regla,
+    # GitLab dispara un pipeline por el push a la rama Y otro por el MR
+    # asociado a esa rama, corriendo todo dos veces. Con esta regla, si el
+    # commit tiene un MR abierto corremos el pipeline "de MR" (que valida
+    # el merge contra la base) y si no, el pipeline normal de la rama.
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_COMMIT_TAG'

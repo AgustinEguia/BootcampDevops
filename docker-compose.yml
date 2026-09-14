@@ -1,0 +1,88 @@
+# docker-compose.yml
+# -------------------
+# Levanta todo el stack local para practicar: la app, Prometheus (scrapea
+# las métricas de la app) y Grafana (visualiza lo que junta Prometheus).
+# node-exporter es opcional: expone métricas del host (CPU, memoria, disco)
+# y sirve para practicar consultas PromQL con datos "reales" del sistema.
+#
+# Uso: `make up` (o `docker compose up --build -d`) y después
+# `make down` para bajar todo.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_VERSION: "local-dev"
+    image: devops-bootcamp-demo:local
+    container_name: demo-app
+    ports:
+      - "8000:8000"
+    environment:
+      APP_VERSION: "local-dev"
+      GREETING: "Hola desde docker-compose!"
+    networks:
+      - demo-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: demo-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    depends_on:
+      - app
+    networks:
+      - demo-net
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: demo-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      # Sólo para uso local del curso: NUNCA usar admin/admin en un
+      # ambiente real. En prod, Grafana debería integrarse con SSO/LDAP.
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - demo-net
+
+  # Opcional: métricas del host (CPU, memoria, disco, red). Útil para que
+  # los alumnos vean métricas "de infraestructura" además de las de la app.
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: demo-node-exporter
+    profiles: ["full"]  # sólo se levanta con `docker compose --profile full up`
+    ports:
+      - "9100:9100"
+    networks:
+      - demo-net
+
+networks:
+  demo-net:
+    driver: bridge
+
+volumes:
+  prometheus-data: {}
+  grafana-data: {}

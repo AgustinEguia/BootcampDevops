@@ -1,0 +1,45 @@
+# values-prod.yaml
+# ------------------
+# Overrides para PRODUCCIÓN: más réplicas, autoscaling habilitado,
+# recursos más generosos y el ServiceMonitor prendido (en prod, más que
+# en ningún otro lado, necesitamos observabilidad).
+replicaCount: 3
+
+env:
+  GREETING: "Hola desde PROD!"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 65
+
+serviceMonitor:
+  enabled: true
+
+ingress:
+  host: demo-app.tu-dominio.com
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # En prod sí queremos TLS automático si el cluster tiene cert-manager.
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+# En prod preferimos esparcir las réplicas entre nodos distintos (mismo
+# razonamiento que en k8s/overlays/prod/replicas-patch.yaml).
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: demo-app
+          topologyKey: kubernetes.io/hostname

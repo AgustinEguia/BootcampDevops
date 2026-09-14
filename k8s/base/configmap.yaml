@@ -1,0 +1,14 @@
+# configmap.yaml
+# ----------------
+# Configuración NO sensible de la app, inyectada como variables de entorno
+# en el deployment. Separamos config de código (Twelve-Factor App): la
+# MISMA imagen Docker sirve para dev y prod, sólo cambia este ConfigMap
+# (o su versión parcheada por el overlay correspondiente).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-app-config
+  labels:
+    app.kubernetes.io/name: demo-app
+data:
+  GREETING: "Hola desde Kubernetes!"

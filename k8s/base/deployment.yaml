@@ -1,0 +1,112 @@
+# deployment.yaml
+# -----------------
+# Deployment de la app demo, pensado como material de referencia de
+# "buenas prácticas mínimas" para correr algo en producción:
+#   - probes de liveness/readiness (para que K8s sepa cuándo reiniciar
+#     el pod y cuándo sacarlo del balanceo de tráfico)
+#   - requests/limits de recursos (para que el scheduler pueda ubicar
+#     bien los pods y nadie "se coma" toda la CPU/memoria del nodo)
+#   - securityContext restrictivo (correr como no-root, sin escalar
+#     privilegios, con filesystem de sólo lectura)
+#   - anotaciones de scrape para que Prometheus lo descubra solo
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+    app.kubernetes.io/part-of: devops-bootcamp-demo
+spec:
+  # El overlay de cada ambiente pisa este valor (dev: 1 réplica, prod: 3).
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: demo-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: demo-app
+      annotations:
+        # Estas anotaciones son el mecanismo "clásico" (pre-Operator) para
+        # que Prometheus, configurado con el job "kubernetes-pods" (ver
+        # monitoring/prometheus/prometheus.yml), descubra automáticamente
+        # que este pod expone métricas y en qué path/puerto.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      # securityContext a nivel POD: aplica a todos los containers del pod.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: demo-app
+          # En base/ dejamos un placeholder: kustomize (images:) o Helm
+          # (values.yaml) son los que fijan la imagen real por ambiente.
+          image: devops-bootcamp-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: APP_VERSION
+              value: "unknown"
+            - name: GREETING
+              valueFrom:
+                configMapKeyRef:
+                  name: demo-app-config
+                  key: GREETING
+          # securityContext a nivel CONTAINER: más granular que el del pod.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Como el filesystem raíz es de sólo lectura (buena práctica de
+          # seguridad: si alguien compromete la app, no puede escribir
+          # binarios maliciosos en el propio contenedor), pero Python/
+          # uvicorn a veces necesita escribir en /tmp, montamos un volumen
+          # emptyDir SÓLO para eso.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          # readinessProbe: "¿puedo recibir tráfico?" — si falla, K8s saca
+          # el pod del Service pero NO lo reinicia.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # livenessProbe: "¿el proceso sigue vivo?" — si falla varias
+          # veces seguidas, K8s MATA y REINICIA el contenedor.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # requests: lo que el scheduler garantiza que el pod va a tener
+          # disponible (usado para decidir en qué nodo ubicarlo).
+          # limits: el techo que el pod NUNCA puede superar (si se pasa de
+          # memoria, el kernel lo mata con OOMKill; si se pasa de CPU, se
+          # lo throttlea, no se lo mata).
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+      volumes:
+        - name: tmp
+          emptyDir: {}

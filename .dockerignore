@@ -1,0 +1,32 @@
+# No copiamos nada de esto al contexto de build de Docker: acelera el build
+# y evita que se filtren archivos sensibles o innecesarios a la imagen.
+.git
+.gitignore
+.github
+.gitlab-ci.yml
+Jenkinsfile
+ci/
+k8s/
+helm/
+terraform/
+monitoring/
+security/
+scripts/
+docs/
+README.md
+Makefile
+docker-compose.yml
+.venv/
+.venv-test/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+junit.xml
+app/tests/
+.env
+.env.*

@@ -1,0 +1,58 @@
+# deployer-rbac.yaml
+# ------------------
+# Identidad que usa el pipeline para desplegar (Día 8).
+#
+# El error más común es darle al CI un token de cluster-admin "para que no
+# moleste". Si ese token se filtra, el atacante es dueño del cluster.
+# Acá le damos el permiso MÍNIMO: sólo puede tocar objetos de deploy y
+# sólo dentro de su namespace.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-deployer
+  namespace: demo-app
+---
+apiVersion: rbac.authorization.k8s.io/v1
+# Role (no ClusterRole): los permisos mueren en el borde del namespace.
+kind: Role
+metadata:
+  name: ci-deployer
+  namespace: demo-app
+rules:
+  # Lo que Helm necesita para instalar y actualizar el release.
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets", "serviceaccounts", "pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Los "logs" son de sólo lectura: sirven para el smoke test y para
+  # diagnosticar un deploy fallido, pero no habilitan a ejecutar nada.
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  # Ojo: NO le damos pods/exec. Una cuenta de CI que puede abrir una shell
+  # dentro de un pod es, en la práctica, una cuenta con acceso a los datos.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deployer
+  namespace: demo-app
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ci-deployer
+subjects:
+  - kind: ServiceAccount
+    name: ci-deployer
+    namespace: demo-app

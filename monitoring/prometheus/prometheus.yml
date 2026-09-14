@@ -1,0 +1,48 @@
+# prometheus.yml
+# ----------------
+# Configuración de Prometheus para el stack local de docker-compose.
+# En un cluster de Kubernetes real, en vez de esto se usaría el
+# Prometheus Operator + ServiceMonitor (ver
+# helm/demo-app/templates/servicemonitor.yaml), que autoconfigura los
+# targets sin tocar este archivo a mano. Acá, para el demo local, usamos
+# la config "clásica" para que los alumnos entiendan primero los
+# conceptos base (scrape_configs, jobs, targets) antes de la capa de
+# abstracción que agrega el Operator.
+global:
+  # Cada cuánto Prometheus scrapea (pide /metrics) a sus targets.
+  scrape_interval: 15s
+  # Cada cuánto evalúa las reglas de alertas (alerts.yml).
+  evaluation_interval: 15s
+
+# Reglas de alertas a cargar (ver alerts.yml en esta misma carpeta).
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus se scrapea a sí mismo: es una práctica común para poder
+  # monitorear la salud del propio sistema de monitoreo.
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # La app demo expone /metrics gracias a prometheus-client (ver
+  # app/metrics.py). En docker-compose, "app" es el nombre del servicio
+  # (Docker DNS interno lo resuelve automáticamente a la IP del
+  # contenedor).
+  - job_name: "demo-app"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["app:8000"]
+        labels:
+          service: "demo-app"
+          env: "local"
+
+  # node-exporter (opcional, perfil "full" de docker-compose): métricas
+  # de CPU/memoria/disco del HOST, útil para practicar PromQL con datos
+  # de infraestructura además de los de la app.
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: "node-exporter"
+          env: "local"

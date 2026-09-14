@@ -1,0 +1,55 @@
+# networkpolicy.yaml
+# ---------------------
+# Por default, en Kubernetes TODOS los pods pueden hablar con TODOS los
+# pods del cluster (no hay "firewall" implícito). Esta NetworkPolicy
+# aplica el principio de menor privilegio: sólo permite el tráfico que
+# explícitamente necesitamos, y bloquea el resto.
+#
+# REQUISITO: el CNI del cluster tiene que soportar NetworkPolicy (Calico,
+# Cilium, el CNI de EKS con VPC CNI + policy engine, etc.) — el CNI
+# "flannel" por defecto de algunos clusters de práctica NO las aplica, en
+# ese caso este manifiesto se aplica sin error pero no tiene efecto real
+# (buen punto para discutir en clase).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: demo-app
+  labels:
+    app.kubernetes.io/name: demo-app
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: demo-app
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Permitimos tráfico entrante desde CUALQUIER pod del namespace (por
+    # ejemplo el Ingress Controller, si corre en el mismo namespace) y,
+    # explícitamente, desde el namespace donde vive Prometheus (para que
+    # pueda scrapear /metrics). Ajustar el label del namespace de
+    # monitoring según cómo esté etiquetado en tu cluster real.
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # Egress a DNS: sin esto, el pod no puede resolver nombres (ni
+    # siquiera el propio kube-dns), lo cual rompe todo lo demás.
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Egress HTTPS genérico: esta app demo no llama a APIs externas, pero
+    # en un caso real (ej. llamar a la API de AWS, a un servicio externo)
+    # se necesitaría abrir el puerto 443 hacia afuera.
+    - ports:
+        - protocol: TCP
+          port: 443

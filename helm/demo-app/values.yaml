@@ -1,0 +1,92 @@
+# values.yaml
+# -------------
+# Valores DEFAULT del chart. values-dev.yaml y values-prod.yaml sólo
+# sobreescriben lo que necesitan cambiar respecto a este archivo (así se
+# evita duplicar TODO el árbol de valores por ambiente).
+replicaCount: 2
+
+image:
+  repository: tu-registry.example.com/devops-bootcamp-demo
+  # "latest" acá es sólo un fallback: en la práctica SIEMPRE se pisa con
+  # --set image.tag=<sha-del-commit> desde el pipeline. Ver security/
+  # policies/kyverno-disallow-latest-tag.yaml para por qué esto está
+  # bloqueado en los manifiestos que realmente llegan al cluster.
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Variables de entorno de la app (no sensibles). Los secretos NO van acá,
+# ver la sección "secrets" más abajo, pensada para integrarse con un
+# operador externo (External Secrets, Sealed Secrets) en un caso real.
+env:
+  GREETING: "Hola desde Helm!"
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: demo-app.local.test
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readiness:
+    path: /readyz
+    initialDelaySeconds: 3
+    periodSeconds: 5
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# ServiceMonitor: recurso del Prometheus Operator (no de Prometheus
+# "vanilla" como el de docker-compose). Sólo tiene efecto si el cluster
+# tiene el Prometheus Operator instalado (el CRD ServiceMonitor debe
+# existir) — por eso viene deshabilitado por default.
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  path: /metrics
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

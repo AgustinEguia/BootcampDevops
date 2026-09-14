@@ -1,0 +1,29 @@
+# kustomization.yaml (overlay dev)
+# ------------------------------------
+# Ambiente de dev: prioriza velocidad de iteración y bajo costo de
+# recursos por sobre alta disponibilidad. Una sola réplica, recursos
+# chicos: total, si se cae, es sólo el ambiente de pruebas.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dev
+
+resources:
+  - ../../base
+
+patches:
+  - path: replicas-patch.yaml
+    target:
+      kind: Deployment
+      name: demo-app
+
+images:
+  # Kustomize reemplaza la imagen del deployment por esta, sin tener que
+  # editar deployment.yaml. El pipeline de CI pisa el tag con el SHA del
+  # commit vía `kubectl set image` o, si usan Helm en vez de kustomize
+  # para el deploy (como en este repo, ver ci/gitlab/40-deploy.yml), esto
+  # queda como referencia para quien prefiera desplegar con
+  # `kubectl apply -k` en vez de Helm.
+  - name: devops-bootcamp-demo
+    newName: tu-registry.example.com/devops-bootcamp-demo
+    newTag: dev-latest

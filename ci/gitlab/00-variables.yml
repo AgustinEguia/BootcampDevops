@@ -1,0 +1,54 @@
+# 00-variables.yml
+# ------------------
+# Variables globales y configuración compartida por todos los jobs del
+# pipeline de GitLab CI. Separar las variables en su propio archivo hace
+# que sea el primer lugar donde buscar "qué se puede configurar" sin tener
+# que leer los 10 stages completos.
+
+variables:
+  # Nombre de la imagen en el registry. GitLab CI expone automáticamente
+  # CI_REGISTRY_IMAGE con la ruta al Container Registry del proyecto.
+  IMAGE_NAME: "${CI_REGISTRY_IMAGE}"
+
+  # Usamos el SHA corto del commit como tag principal: es único, trazable
+  # y no requiere coordinación humana (a diferencia de un semver manual).
+  # Además taggeamos con el nombre de branch para tener siempre un tag
+  # "mobil" que apunte al último build de esa rama.
+  IMAGE_TAG_SHA: "${CI_COMMIT_SHORT_SHA}"
+  IMAGE_TAG_BRANCH: "${CI_COMMIT_REF_SLUG}"
+
+  # Habilita BuildKit para builds de Docker más rápidos (cache más
+  # inteligente, builds paralelos de stages independientes).
+  DOCKER_BUILDKIT: "1"
+  DOCKER_TLS_CERTDIR: "/certs"
+
+  # Directorio de cache de pip, para que el job de test no reinstale todo
+  # de cero en cada corrida del pipeline.
+  PIP_CACHE_DIR: "${CI_PROJECT_DIR}/.cache/pip"
+
+  # Namespaces de Kubernetes usados por los jobs de deploy.
+  K8S_NAMESPACE_DEV: "dev"
+  K8S_NAMESPACE_PROD: "prod"
+
+# Los 10 stages del pipeline, en el orden en que corren. GitLab corre todos
+# los jobs de un stage en paralelo y sólo pasa al siguiente si todos los
+# jobs "bloqueantes" (allow_failure: false, el default) del stage actual
+# terminaron OK.
+stages:
+  - lint
+  - test
+  - sast
+  - secrets
+  - sca
+  - build
+  - image-scan
+  - deploy-dev
+  - smoke-test
+  - deploy-prod
+
+# Regla reusable: sólo correr jobs de deploy en la rama principal. La
+# definimos acá una vez y la referenciamos con `!reference` desde
+# 40-deploy.yml para no repetirla en cada job.
+.only_main: &only_main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
