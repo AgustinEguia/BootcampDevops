@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # devops-bootcamp-demo
 
 Repositorio demo del **bootcamp de DevOps/CI-CD** (10 días). Es una app
@@ -138,6 +137,5 @@ estimación de costos. Para practicar Kubernetes sin gastar en AWS, usar
 ## Licencia
 
 Material educativo para uso interno del bootcamp.
-=======
 # BootcampDevops
->>>>>>> 2307cf8fed5dedf8b385ebc3d8e5ef85614729ee
+2307cf8fed5dedf8b385ebc3d8e5ef85614729ee
